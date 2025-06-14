@@ -1,0 +1,7 @@
+BoxLayout:
+    orientation: 'vertical'
+    Label:
+        text: 'Hello from KV!'
+    Button:
+        text: 'Press me'
+        on_press: app.on_button_press()
