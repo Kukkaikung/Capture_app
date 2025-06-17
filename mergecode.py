@@ -39,26 +39,12 @@ class BrownRectangleDetector:
     def find_contours(self):
         self.contours, _ = cv2.findContours(self.mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-    def order_points(self, pts):
-        rect = np.zeros((4, 2), dtype="float32")
-        s = pts.sum(axis=1)
-        diff = np.diff(pts, axis=1)
-
-        rect[0] = pts[np.argmin(s)]
-        rect[2] = pts[np.argmax(s)]
-        rect[1] = pts[np.argmin(diff)]
-        rect[3] = pts[np.argmax(diff)]
-        return rect
-
     def process_contours(self):
         for cnt in self.contours:
-            epsilon = 0.02 * cv2.arcLength(cnt, True)
-            approx = cv2.approxPolyDP(cnt, epsilon, True)
-
-            if len(approx) == 4 and cv2.isContourConvex(approx):
-                area = cv2.contourArea(approx)
-                if area > 500:
-                    cv2.drawContours(self.image, [approx], -1, (0, 255, 0), 3)
+            area = cv2.contourArea(cnt)
+            if area > 300:
+                approx = cv2.approxPolyDP(cnt, 0.02 * cv2.arcLength(cnt, True), True)
+                cv2.drawContours(self.image, [approx], -1, (0, 255, 0), 3)
 
         self.detected_image = self.image.copy()
 
@@ -120,13 +106,19 @@ class CamApp(App):
 
     def build_result_screen(self):
         layout = BoxLayout(orientation='horizontal')
+
         self.detected_img_widget = Image()
         self.mask_img_widget = Image()
 
+        # ฝั่งซ้าย
         left = BoxLayout(size_hint=(0.7, 1))
         left.add_widget(self.detected_img_widget)
-        left.add_widget(self.mask_img_widget)
 
+        # ฝั่งขวา
+        right_view = BoxLayout(size_hint=(0.7, 1))
+        right_view.add_widget(self.mask_img_widget)
+
+        # ปุ่ม
         right = BoxLayout(orientation='vertical', spacing=20, padding=40, size_hint=(0.3, 1))
         back_btn = Button(text='back', size_hint=(1, None), height=70)
         back_btn.bind(on_press=self.go_back)
@@ -140,8 +132,11 @@ class CamApp(App):
         for btn in [back_btn, export_btn, exit_btn]:
             right.add_widget(btn)
 
+        # ✅ เพิ่มฝั่งภาพที่จัดกล่องแล้ว ไม่เพิ่มซ้ำ
         layout.add_widget(left)
+        layout.add_widget(right_view)
         layout.add_widget(right)
+
         self.result_screen.add_widget(layout)
 
     def toggle_camera(self, instance):
@@ -182,22 +177,21 @@ class CamApp(App):
             detector = BrownRectangleDetector("captured_image.jpg")
             original, detected, mask = detector.run()
 
-            # detected image
+            # Original image → Left
+            original_rgb = cv2.cvtColor(original, cv2.COLOR_BGR2RGB)
+            original_rgb = cv2.flip(original_rgb, 0)
+            buf_orig = original_rgb.tobytes()
+            texture_orig = Texture.create(size=(original_rgb.shape[1], original_rgb.shape[0]), colorfmt='rgb')
+            texture_orig.blit_buffer(buf_orig, colorfmt='rgb', bufferfmt='ubyte')
+            self.detected_img_widget.texture = texture_orig
+
+            # Detected image (with contours) → Right
             detected_rgb = cv2.cvtColor(detected, cv2.COLOR_BGR2RGB)
             detected_rgb = cv2.flip(detected_rgb, 0)
-            buf1 = detected_rgb.tobytes()
-            texture1 = Texture.create(size=(detected_rgb.shape[1], detected_rgb.shape[0]), colorfmt='rgb')
-            texture1.blit_buffer(buf1, colorfmt='rgb', bufferfmt='ubyte')
-            self.detected_img_widget.texture = texture1
-
-            # mask image
-            mask_color = cv2.cvtColor(mask, cv2.COLOR_GRAY2BGR)
-            mask_rgb = cv2.cvtColor(mask_color, cv2.COLOR_BGR2RGB)
-            mask_rgb = cv2.flip(mask_rgb, 0)
-            buf2 = mask_rgb.tobytes()
-            texture2 = Texture.create(size=(mask_rgb.shape[1], mask_rgb.shape[0]), colorfmt='rgb')
-            texture2.blit_buffer(buf2, colorfmt='rgb', bufferfmt='ubyte')
-            self.mask_img_widget.texture = texture2
+            buf_detected = detected_rgb.tobytes()
+            texture_detected = Texture.create(size=(detected_rgb.shape[1], detected_rgb.shape[0]), colorfmt='rgb')
+            texture_detected.blit_buffer(buf_detected, colorfmt='rgb', bufferfmt='ubyte')
+            self.mask_img_widget.texture = texture_detected
 
             self.sm.current = 'result'
 
