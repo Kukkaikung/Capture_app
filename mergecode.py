@@ -230,7 +230,30 @@ class CamApp(App):
         self.sm.current = 'main'
 
     def export(self, instance):
-        print("Export function placeholder")
+        if hasattr(self, 'warped_img_widget') and self.warped_img_widget.texture:
+            try:
+                # ดึงข้อมูลจาก texture ของ warped image
+                size = self.warped_img_widget.texture.size
+                pixels = self.warped_img_widget.texture.pixels
+                img = np.frombuffer(pixels, dtype=np.uint8).reshape(size[1], size[0], 4)
+
+                # ลบ alpha channel (RGBA -> RGB)
+                img = img[:, :, :3]
+
+                # Flip กลับ (เนื่องจากเรากลับแกน y ตอนแสดงภาพ)
+                img = cv2.flip(img, 0)
+
+                # แปลงจาก RGB กลับเป็น BGR เพื่อให้ใช้กับ OpenCV
+                img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+                # เซฟภาพ
+                cv2.imwrite("exported_warped.jpg", img_bgr)
+                print("Warped image exported as 'exported_warped.jpg'")
+            except Exception as e:
+                print(f"Error exporting image: {e}")
+        else:
+            print("No warped image to export.")
+
 
     def stop_app(self, instance):
         App.get_running_app().stop()
