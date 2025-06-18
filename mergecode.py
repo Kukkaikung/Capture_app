@@ -9,7 +9,7 @@ from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.uix.screenmanager import ScreenManager, Screen
 
-# ---------- OOP ตรวจจับสี่เหลี่ยม ----------
+# ---------- OOP ตรวจจับและแปลง Perspective ----------
 class BrownRectangleDetector:
     def __init__(self, image_path):
         self.image_path = image_path
@@ -18,7 +18,7 @@ class BrownRectangleDetector:
         self.hsv = None
         self.mask = None
         self.contours = []
-        self.detected_image = None
+        self.warped = None
 
     def load_image(self):
         self.image = cv2.imread(self.image_path)
@@ -39,21 +39,53 @@ class BrownRectangleDetector:
     def find_contours(self):
         self.contours, _ = cv2.findContours(self.mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
+    def order_points(self, pts):
+        rect = np.zeros((4, 2), dtype="float32")
+        s = pts.sum(axis=1)
+        diff = np.diff(pts, axis=1)
+        rect[0] = pts[np.argmin(s)]
+        rect[2] = pts[np.argmax(s)]
+        rect[1] = pts[np.argmin(diff)]
+        rect[3] = pts[np.argmax(diff)]
+        return rect
+
     def process_contours(self):
         for cnt in self.contours:
-            area = cv2.contourArea(cnt)
-            if area > 300:
-                approx = cv2.approxPolyDP(cnt, 0.02 * cv2.arcLength(cnt, True), True)
-                cv2.drawContours(self.image, [approx], -1, (0, 255, 0), 3)
+            epsilon = 0.02 * cv2.arcLength(cnt, True)
+            approx = cv2.approxPolyDP(cnt, epsilon, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                area = cv2.contourArea(approx)
+                if area > 500:
+                    pts = approx.reshape(4, 2)
+                    rect = self.order_points(pts)
+                    self.warp_perspective(rect)
+                    break  # ใช้เฉพาะสี่เหลี่ยมแรก
 
-        self.detected_image = self.image.copy()
+    def warp_perspective(self, rect):
+        (tl, tr, br, bl) = rect
+        widthA = np.linalg.norm(br - bl)
+        widthB = np.linalg.norm(tr - tl)
+        maxWidth = int(max(widthA, widthB))
+        heightA = np.linalg.norm(tr - br)
+        heightB = np.linalg.norm(tl - bl)
+        maxHeight = int(max(heightA, heightB))
+
+        dst = np.array([
+            [0, 0],
+            [maxWidth - 1, 0],
+            [maxWidth - 1, maxHeight - 1],
+            [0, maxHeight - 1]
+        ], dtype="float32")
+
+        M = cv2.getPerspectiveTransform(rect, dst)
+        self.warped = cv2.warpPerspective(self.original, M, (maxWidth, maxHeight))
 
     def run(self):
         self.load_image()
         self.create_mask()
         self.find_contours()
         self.process_contours()
-        return self.original, self.detected_image, self.mask
+        return self.original, self.warped
 
 # ---------- Screens ----------
 class MainScreen(Screen):
@@ -107,19 +139,16 @@ class CamApp(App):
     def build_result_screen(self):
         layout = BoxLayout(orientation='horizontal')
 
-        self.detected_img_widget = Image()
-        self.mask_img_widget = Image()
+        self.original_img_widget = Image()
+        self.warped_img_widget = Image()
 
-        # ฝั่งซ้าย
-        left = BoxLayout(size_hint=(0.7, 1))
-        left.add_widget(self.detected_img_widget)
+        left = BoxLayout(size_hint=(0.5, 1))
+        left.add_widget(self.original_img_widget)
 
-        # ฝั่งขวา
-        right_view = BoxLayout(size_hint=(0.7, 1))
-        right_view.add_widget(self.mask_img_widget)
+        right = BoxLayout(size_hint=(0.5, 1))
+        right.add_widget(self.warped_img_widget)
 
-        # ปุ่ม
-        right = BoxLayout(orientation='vertical', spacing=20, padding=40, size_hint=(0.3, 1))
+        btns = BoxLayout(orientation='vertical', spacing=20, padding=40, size_hint=(0.3, 1))
         back_btn = Button(text='back', size_hint=(1, None), height=70)
         back_btn.bind(on_press=self.go_back)
 
@@ -130,12 +159,11 @@ class CamApp(App):
         exit_btn.bind(on_press=self.stop_app)
 
         for btn in [back_btn, export_btn, exit_btn]:
-            right.add_widget(btn)
+            btns.add_widget(btn)
 
-        # ✅ เพิ่มฝั่งภาพที่จัดกล่องแล้ว ไม่เพิ่มซ้ำ
         layout.add_widget(left)
-        layout.add_widget(right_view)
         layout.add_widget(right)
+        layout.add_widget(btns)
 
         self.result_screen.add_widget(layout)
 
@@ -175,23 +203,23 @@ class CamApp(App):
     def detect(self, instance):
         try:
             detector = BrownRectangleDetector("captured_image.jpg")
-            original, detected, mask = detector.run()
+            original, warped = detector.run()
 
-            # Original image → Left
-            original_rgb = cv2.cvtColor(original, cv2.COLOR_BGR2RGB)
-            original_rgb = cv2.flip(original_rgb, 0)
-            buf_orig = original_rgb.tobytes()
-            texture_orig = Texture.create(size=(original_rgb.shape[1], original_rgb.shape[0]), colorfmt='rgb')
-            texture_orig.blit_buffer(buf_orig, colorfmt='rgb', bufferfmt='ubyte')
-            self.detected_img_widget.texture = texture_orig
+            if original is not None:
+                original_rgb = cv2.cvtColor(original, cv2.COLOR_BGR2RGB)
+                original_rgb = cv2.flip(original_rgb, 0)
+                buf_orig = original_rgb.tobytes()
+                texture_orig = Texture.create(size=(original_rgb.shape[1], original_rgb.shape[0]), colorfmt='rgb')
+                texture_orig.blit_buffer(buf_orig, colorfmt='rgb', bufferfmt='ubyte')
+                self.original_img_widget.texture = texture_orig
 
-            # Detected image (with contours) → Right
-            detected_rgb = cv2.cvtColor(detected, cv2.COLOR_BGR2RGB)
-            detected_rgb = cv2.flip(detected_rgb, 0)
-            buf_detected = detected_rgb.tobytes()
-            texture_detected = Texture.create(size=(detected_rgb.shape[1], detected_rgb.shape[0]), colorfmt='rgb')
-            texture_detected.blit_buffer(buf_detected, colorfmt='rgb', bufferfmt='ubyte')
-            self.mask_img_widget.texture = texture_detected
+            if warped is not None:
+                warped_rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
+                warped_rgb = cv2.flip(warped_rgb, 0)
+                buf_warp = warped_rgb.tobytes()
+                texture_warp = Texture.create(size=(warped_rgb.shape[1], warped_rgb.shape[0]), colorfmt='rgb')
+                texture_warp.blit_buffer(buf_warp, colorfmt='rgb', bufferfmt='ubyte')
+                self.warped_img_widget.texture = texture_warp
 
             self.sm.current = 'result'
 
