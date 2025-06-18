@@ -8,6 +8,8 @@ from kivy.uix.button import Button
 from kivy.clock import Clock
 from kivy.core.window import Window
 from kivy.uix.screenmanager import ScreenManager, Screen
+from kivy.uix.popup import Popup
+from kivy.uix.label import Label
 
 # ---------- OOP ตรวจจับและแปลง Perspective ----------
 class BrownRectangleDetector:
@@ -229,30 +231,69 @@ class CamApp(App):
     def go_back(self, instance):
         self.sm.current = 'main'
 
+
+
     def export(self, instance):
-        if hasattr(self, 'warped_img_widget') and self.warped_img_widget.texture:
+        content = BoxLayout(orientation='vertical', spacing=10, padding=20)
+
+        label = Label(text="Choose image(s) to export:", size_hint=(1, None), height=30)
+        btn_orig = Button(text="Export Original Image", size_hint=(1, None), height=50)
+        btn_warp = Button(text="Export Perspective Image", size_hint=(1, None), height=50)
+        btn_both = Button(text="Export Both Images", size_hint=(1, None), height=50)
+        btn_close = Button(text="Cancel", size_hint=(1, None), height=50)
+
+        content.add_widget(label)
+        content.add_widget(btn_orig)
+        content.add_widget(btn_warp)
+        content.add_widget(btn_both)
+        content.add_widget(btn_close)
+
+        popup = Popup(title="Export Image", content=content,
+                      size_hint=(None, None), size=(400, 400), auto_dismiss=False)
+
+        def save_original(instance):
             try:
-                # ดึงข้อมูลจาก texture ของ warped image
-                size = self.warped_img_widget.texture.size
-                pixels = self.warped_img_widget.texture.pixels
-                img = np.frombuffer(pixels, dtype=np.uint8).reshape(size[1], size[0], 4)
-
-                # ลบ alpha channel (RGBA -> RGB)
-                img = img[:, :, :3]
-
-                # Flip กลับ (เนื่องจากเรากลับแกน y ตอนแสดงภาพ)
-                img = cv2.flip(img, 0)
-
-                # แปลงจาก RGB กลับเป็น BGR เพื่อให้ใช้กับ OpenCV
-                img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-
-                # เซฟภาพ
-                cv2.imwrite("exported_warped.jpg", img_bgr)
-                print("Warped image exported as 'exported_warped.jpg'")
+                if self.original_img_widget.texture:
+                    size = self.original_img_widget.texture.size
+                    pixels = self.original_img_widget.texture.pixels
+                    img = np.frombuffer(pixels, dtype=np.uint8).reshape(size[1], size[0], 4)
+                    img = img[:, :, :3]
+                    img = cv2.flip(img, 0)
+                    img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                    cv2.imwrite("exported_original.jpg", img_bgr)
+                    print("Original image exported as 'exported_original.jpg'")
             except Exception as e:
-                print(f"Error exporting image: {e}")
-        else:
-            print("No warped image to export.")
+                print(f"Error exporting original image: {e}")
+            popup.dismiss()
+
+        def save_warped(instance):
+            try:
+                if self.warped_img_widget.texture:
+                    size = self.warped_img_widget.texture.size
+                    pixels = self.warped_img_widget.texture.pixels
+                    img = np.frombuffer(pixels, dtype=np.uint8).reshape(size[1], size[0], 4)
+                    img = img[:, :, :3]
+                    img = cv2.flip(img, 0)
+                    img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+                    cv2.imwrite("exported_warped.jpg", img_bgr)
+                    print("Warped image exported as 'exported_warped.jpg'")
+            except Exception as e:
+                print(f"Error exporting warped image: {e}")
+            popup.dismiss()
+
+        def save_both(instance):
+            save_original(instance)
+            save_warped(instance)
+
+        def close_popup(instance):
+            popup.dismiss()
+
+        btn_orig.bind(on_press=save_original)
+        btn_warp.bind(on_press=save_warped)
+        btn_both.bind(on_press=save_both)
+        btn_close.bind(on_press=close_popup)
+
+        popup.open()
 
 
     def stop_app(self, instance):
