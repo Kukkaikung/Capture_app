@@ -13,6 +13,7 @@ from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.filechooser import FileChooserListView
 import os
+from datetime import datetime
 
 # ---------- OOP ตรวจจับและแปลง Perspective ----------
 class BrownRectangleDetector:
@@ -337,65 +338,50 @@ class CamApp(App):
     def go_back(self, instance):
         self.sm.current = 'main'
 
+
     def export(self, instance):
-        content = BoxLayout(orientation='vertical', spacing=10, padding=20)
-
-        label = Label(text="Choose image(s) to export:", size_hint=(1, None), height=30)
-        btn_orig = Button(text="Export Original Image", size_hint=(1, None), height=50)
-        btn_warp = Button(text="Export Perspective Image", size_hint=(1, None), height=50)
-        btn_both = Button(text="Export Both Images", size_hint=(1, None), height=50)
-        btn_close = Button(text="Cancel", size_hint=(1, None), height=50)
-
-        content.add_widget(label)
-        content.add_widget(btn_orig)
-        content.add_widget(btn_warp)
-        content.add_widget(btn_both)
-        content.add_widget(btn_close)
-
-        popup = Popup(title="Export Image", content=content,
-                      size_hint=(None, None), size=(400, 400), auto_dismiss=False)
-
-        def save_original(instance):
-            try:
-                if self.original_img_widget.texture:
-                    size = self.original_img_widget.texture.size
-                    pixels = self.original_img_widget.texture.pixels
-                    img = np.frombuffer(pixels, dtype=np.uint8).reshape(size[1], size[0], 4)
-                    img = img[:, :, :3]
-                    img = cv2.flip(img, 0)
-                    img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                    cv2.imwrite("exported_original.jpg", img_bgr)
-                    print("Original image exported as 'exported_original.jpg'")
-            except Exception as e:
-                print(f"Error exporting original image: {e}")
-            popup.dismiss()
-
         def save_warped(instance):
             try:
                 if self.warped_img_widget.texture:
+                    now = datetime.now().strftime('%Y%m%d_%H%M%S')
+            
+                    export_folder = os.path.join(self.save_folder, "detected_img")
+                    os.makedirs(export_folder, exist_ok=True)
+            
+                    filename = os.path.join(export_folder, f"warped_{now}.jpg")
+
                     size = self.warped_img_widget.texture.size
                     pixels = self.warped_img_widget.texture.pixels
                     img = np.frombuffer(pixels, dtype=np.uint8).reshape(size[1], size[0], 4)
                     img = img[:, :, :3]
                     img = cv2.flip(img, 0)
                     img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
-                    cv2.imwrite("exported_warped.jpg", img_bgr)
-                    print("Warped image exported as 'exported_warped.jpg'")
+                    cv2.imwrite(filename, img_bgr)
+                    print(f"Warped image exported as '{filename}'")
             except Exception as e:
                 print(f"Error exporting warped image: {e}")
             popup.dismiss()
 
-        def save_both(instance):
-            save_original(instance)
-            save_warped(instance)
 
         def close_popup(instance):
             popup.dismiss()
 
-        btn_orig.bind(on_press=save_original)
-        btn_warp.bind(on_press=save_warped)
-        btn_both.bind(on_press=save_both)
-        btn_close.bind(on_press=close_popup)
+    # --- ส่วนนี้สำคัญ: ต้องอยู่ก่อน popup.open() ---
+        content = BoxLayout(orientation='vertical', spacing=10, padding=20)
+
+        label = Label(text="Export Warped Image", size_hint=(1, None), height=30)
+        btn_export = Button(text="Export", size_hint=(1, None), height=50)
+        btn_cancel = Button(text="Cancel", size_hint=(1, None), height=50)
+
+        content.add_widget(label)
+        content.add_widget(btn_export)
+        content.add_widget(btn_cancel)
+
+        popup = Popup(title="Export Warped Image", content=content,
+                    size_hint=(None, None), size=(400, 250), auto_dismiss=False)
+
+        btn_export.bind(on_press=save_warped)
+        btn_cancel.bind(on_press=close_popup)
 
         popup.open()
 
