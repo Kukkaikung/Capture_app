@@ -106,6 +106,7 @@ class CamApp(App):
         self.capture_count = 0  
         self.save_folder = "images"
         os.makedirs(self.save_folder, exist_ok=True)
+        self.capture_count = self.sort() 
         self.sm = ScreenManager()
 
         self.main_screen = MainScreen(name='main')
@@ -308,6 +309,18 @@ class CamApp(App):
             cv2.imwrite(filename, frame)
             print(f"Image captured and saved as '{filename}'")
                
+    def sort(self):
+        files = os.listdir(self.save_folder)
+        max_number = 0
+        for file in files:
+            if file.startswith("captured_image") and file.endswith(".jpg"):
+                try:
+                    number = int(file.replace("captured_image", "").replace(".jpg", ""))
+                    if number > max_number:
+                        max_number = number
+                except:
+                    continue
+        return max_number
 
     def detect(self, instance):
         try:
