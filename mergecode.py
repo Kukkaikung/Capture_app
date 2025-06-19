@@ -121,6 +121,9 @@ class CamApp(App):
         return self.sm
 
     def build_main_screen(self):
+        if self.main_screen.children:
+            return  # ป้องกัน recursion จากการเพิ่มซ้ำ
+
         layout = BoxLayout(orientation='horizontal')
         self.img_widget = Image()
         left = BoxLayout(size_hint=(0.7, 1))
@@ -151,6 +154,9 @@ class CamApp(App):
         self.main_screen.add_widget(layout)
 
     def build_result_screen(self):
+        if self.result_screen.children:
+            return  # ป้องกัน recursion จากการเพิ่มซ้ำ
+
         layout = BoxLayout(orientation='horizontal')
 
         self.original_img_widget = Image()
@@ -324,7 +330,15 @@ class CamApp(App):
 
     def detect(self, instance):
         try:
-            detector = BrownRectangleDetector("captured_image.jpg")
+            # หาชื่อไฟล์ล่าสุด
+            files = sorted([f for f in os.listdir(self.save_folder) if f.startswith("captured_image") and f.endswith(".jpg")])
+            if not files:
+                print("No captured images found.")
+                return
+            
+            latest_file = os.path.join(self.save_folder, files[-1])  # รูปล่าสุด
+
+            detector = BrownRectangleDetector(latest_file)
             original, warped = detector.run()
 
             if original is not None:
