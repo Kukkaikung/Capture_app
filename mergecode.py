@@ -11,6 +11,7 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.popup import Popup
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
+from kivy.uix.filechooser import FileChooserListView
 import os
 
 # ---------- OOP ตรวจจับและแปลง Perspective ----------
@@ -135,7 +136,7 @@ class CamApp(App):
         capture_btn.bind(on_press=self.capture_image)
 
         detect_btn = Button(text='detect', size_hint=(1, None), height=70)
-        detect_btn.bind(on_press=self.detect)
+        detect_btn.bind(on_press=self.select_image_and_detect)
 
         exit_btn = Button(text='exit', size_hint=(1, None), height=70)
         exit_btn.bind(on_press=self.stop_app)
@@ -193,7 +194,7 @@ class CamApp(App):
         content.add_widget(btn_cancel)
 
         popup = Popup(title="Select Camera", content=content,
-                      size_hint=(None, None), size=(400, 300), auto_dismiss=False)
+                      size_hint=(None, None), size=(500,600), auto_dismiss=False)
 
         def set_camera(instance):
             try:
@@ -237,6 +238,63 @@ class CamApp(App):
                 texture = Texture.create(size=(frame_rgb.shape[1], frame_rgb.shape[0]), colorfmt='rgb')
                 texture.blit_buffer(buf, colorfmt='rgb', bufferfmt='ubyte')
                 self.img_widget.texture = texture
+    def detect_image_file(self, image_path):
+        try:
+            detector = BrownRectangleDetector(image_path)
+            original, warped = detector.run()
+
+            if original is not None:
+                original_rgb = cv2.cvtColor(original, cv2.COLOR_BGR2RGB)
+                original_rgb = cv2.flip(original_rgb, 0)
+                buf_orig = original_rgb.tobytes()
+                texture_orig = Texture.create(size=(original_rgb.shape[1], original_rgb.shape[0]), colorfmt='rgb')
+                texture_orig.blit_buffer(buf_orig, colorfmt='rgb', bufferfmt='ubyte')
+                self.original_img_widget.texture = texture_orig
+
+            if warped is not None:
+                warped_rgb = cv2.cvtColor(warped, cv2.COLOR_BGR2RGB)
+                warped_rgb = cv2.flip(warped_rgb, 0)
+                buf_warp = warped_rgb.tobytes()
+                texture_warp = Texture.create(size=(warped_rgb.shape[1], warped_rgb.shape[0]), colorfmt='rgb')
+                texture_warp.blit_buffer(buf_warp, colorfmt='rgb', bufferfmt='ubyte')
+                self.warped_img_widget.texture = texture_warp
+
+            self.sm.current = 'result'
+
+        except Exception as e:
+            print(f"Detection error: {e}")
+
+    def select_image_and_detect(self, instance):
+        content = BoxLayout(orientation='vertical', spacing=10, padding=10)
+        filechooser = FileChooserListView(path='images/', filters=['*.jpg'])
+        btn_box = BoxLayout(size_hint=(1, None), height=50, spacing=10)
+        btn_ok = Button(text='Detect')
+        btn_cancel = Button(text='Cancel')
+
+        btn_box.add_widget(btn_ok)
+        btn_box.add_widget(btn_cancel)
+
+        content.add_widget(filechooser)
+        content.add_widget(btn_box)
+
+        popup = Popup(title='Select image to detect', content=content,
+                    size_hint=(0.9, 0.9), auto_dismiss=False)
+
+        def detect_selected_image(instance):
+            if filechooser.selection:
+                selected_path = filechooser.selection[0]
+                popup.dismiss()
+                self.detect_image_file(selected_path)
+            else:
+                print("No file selected.")
+
+        def cancel_popup(instance):
+            popup.dismiss()
+
+        btn_ok.bind(on_press=detect_selected_image)
+        btn_cancel.bind(on_press=cancel_popup)
+
+        popup.open()
 
     def capture_image(self, instance):
         if hasattr(self, 'capture') and self.capture:
