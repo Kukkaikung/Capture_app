@@ -194,7 +194,7 @@ class CamApp(App):
         content.add_widget(btn_cancel)
 
         popup = Popup(title="Select Camera", content=content,
-                      size_hint=(None, None), size=(500,600), auto_dismiss=False)
+                      size_hint=(None, None), size=(500,500), auto_dismiss=False)
 
         def set_camera(instance):
             try:
