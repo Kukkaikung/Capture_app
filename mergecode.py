@@ -10,6 +10,7 @@ from kivy.core.window import Window
 from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.popup import Popup
 from kivy.uix.label import Label
+from kivy.uix.textinput import TextInput
 
 # ---------- OOP ตรวจจับและแปลง Perspective ----------
 class BrownRectangleDetector:
@@ -61,7 +62,7 @@ class BrownRectangleDetector:
                     pts = approx.reshape(4, 2)
                     rect = self.order_points(pts)
                     self.warp_perspective(rect)
-                    break  # ใช้เฉพาะสี่เหลี่ยมแรก
+                    break
 
     def warp_perspective(self, rect):
         (tl, tr, br, bl) = rect
@@ -99,6 +100,7 @@ class ResultScreen(Screen):
 # ---------- Kivy UI ----------
 class CamApp(App):
     def build(self):
+        self.capture_count = 0  
         self.sm = ScreenManager()
 
         self.main_screen = MainScreen(name='main')
@@ -119,6 +121,10 @@ class CamApp(App):
         left.add_widget(self.img_widget)
 
         right = BoxLayout(orientation='vertical', spacing=20, padding=40, size_hint=(0.3, 1))
+
+        select_cam_btn = Button(text='select camera', size_hint=(1, None), height=70)
+        select_cam_btn.bind(on_press=self.select_camera)
+
         self.btn = Button(text='open camera', size_hint=(1, None), height=70)
         self.btn.bind(on_press=self.toggle_camera)
 
@@ -131,7 +137,7 @@ class CamApp(App):
         exit_btn = Button(text='exit', size_hint=(1, None), height=70)
         exit_btn.bind(on_press=self.stop_app)
 
-        for btn in [self.btn, capture_btn, detect_btn, exit_btn]:
+        for btn in [select_cam_btn, self.btn, capture_btn, detect_btn, exit_btn]:
             right.add_widget(btn)
 
         layout.add_widget(left)
@@ -169,6 +175,40 @@ class CamApp(App):
 
         self.result_screen.add_widget(layout)
 
+    def select_camera(self, instance):
+        content = BoxLayout(orientation='vertical', spacing=10, padding=20)
+
+        label = Label(text="Enter Camera Index (0, 1, 2...):", size_hint=(1, None), height=30)
+        cam_input = TextInput(multiline=False, size_hint=(1, None), height=50, input_filter='int')
+
+        btn_ok = Button(text="Set", size_hint=(1, None), height=50)
+        btn_cancel = Button(text="Cancel", size_hint=(1, None), height=50)
+
+        content.add_widget(label)
+        content.add_widget(cam_input)
+        content.add_widget(btn_ok)
+        content.add_widget(btn_cancel)
+
+        popup = Popup(title="Select Camera", content=content,
+                      size_hint=(None, None), size=(400, 300), auto_dismiss=False)
+
+        def set_camera(instance):
+            try:
+                idx = int(cam_input.text)
+                self.camera_index = idx
+                print(f"Camera index set to {idx}")
+            except ValueError:
+                print("Invalid camera index.")
+            popup.dismiss()
+
+        def cancel(instance):
+            popup.dismiss()
+
+        btn_ok.bind(on_press=set_camera)
+        btn_cancel.bind(on_press=cancel)
+
+        popup.open()
+
     def toggle_camera(self, instance):
         if hasattr(self, 'capture') and self.capture:
             self.capture.release()
@@ -177,7 +217,7 @@ class CamApp(App):
             self.btn.text = 'open camera'
             Clock.unschedule(self.update)
         else:
-            self.capture = cv2.VideoCapture(0)
+            self.capture = cv2.VideoCapture(self.camera_index)
             if not self.capture.isOpened():
                 print("Cannot open camera")
                 return
@@ -198,9 +238,14 @@ class CamApp(App):
     def capture_image(self, instance):
         if hasattr(self, 'capture') and self.capture:
             ret, frame = self.capture.read()
+             
             if ret:
-                cv2.imwrite("captured_image.jpg", frame)
-                print("Image captured.")
+                i = 1
+            self.capture_count += 1
+            filename = f"captured_image{self.capture_count}.jpg"
+            cv2.imwrite(filename, frame)
+            print(f"Image captured and saved as '{filename}'")
+               
 
     def detect(self, instance):
         try:
@@ -230,8 +275,6 @@ class CamApp(App):
 
     def go_back(self, instance):
         self.sm.current = 'main'
-
-
 
     def export(self, instance):
         content = BoxLayout(orientation='vertical', spacing=10, padding=20)
@@ -294,7 +337,6 @@ class CamApp(App):
         btn_close.bind(on_press=close_popup)
 
         popup.open()
-
 
     def stop_app(self, instance):
         App.get_running_app().stop()
