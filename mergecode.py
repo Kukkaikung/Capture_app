@@ -11,6 +11,7 @@ from kivy.uix.screenmanager import ScreenManager, Screen
 from kivy.uix.popup import Popup
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
+import os
 
 # ---------- OOP ตรวจจับและแปลง Perspective ----------
 class BrownRectangleDetector:
@@ -101,6 +102,8 @@ class ResultScreen(Screen):
 class CamApp(App):
     def build(self):
         self.capture_count = 0  
+        self.save_folder = "images"
+        os.makedirs(self.save_folder, exist_ok=True)
         self.sm = ScreenManager()
 
         self.main_screen = MainScreen(name='main')
@@ -242,7 +245,7 @@ class CamApp(App):
             if ret:
                 i = 1
             self.capture_count += 1
-            filename = f"captured_image{self.capture_count}.jpg"
+            filename = os.path.join(self.save_folder,f"captured_image{self.capture_count}.jpg")
             cv2.imwrite(filename, frame)
             print(f"Image captured and saved as '{filename}'")
                
